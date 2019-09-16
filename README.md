@@ -48,13 +48,14 @@
   class SigProApp(SigPro):
     def __init__(self,configs_path):
         super(SigPro,self).__init__(configs_path)
+        self.CODER = DefaultCoder() #仅为示例，示例使用系统默认提供的coder,这里应为用户自定义coder。否则该行代码可以不要。
     
     def process(self,eeg,marker):
         ## user define
         if ....:
            return 0
         elif ....:
-           self.output_buffer = '.....'
+           self.RESULT = '.....'
            return 1
         elif ....:
            return -1
@@ -68,6 +69,18 @@
   
 ## sigpro API和参数说明
   * configs_path: 为系统配置文件路径
+  * 初始化coder：信号处理模块计算得到的结果将存放到self.RESULT变量中，这些结果将通过socket发送给订阅者。发送前需要将其转换为字符串类型，因此需要提供coder,在信号处理端将其encode为字符串（**后台自动执行，用户仅需要提供coder类**），在订阅者端通过decode方法将字符串解析得到结果。默认情况下，提供的coder如下所示（这也是系统默认提供的coder。上述示例代码中的词句可以不要。实际上用户自定义coder也应该为如下形式包含至少encode和decode方法）。
+  ```javascript
+  class DefaultCoder():
+    def __init__(self):
+        pass
+
+    def encode(self,obj):
+        return json.dumps(obj)
+
+    def decode(self,buf):
+        return json.loads(buf)
+  ```
   * process:该函数每0.1秒调用一次，将传入0.1秒的即时eeg数据以及获取的marker数据
     * eeg数据 type: numpy.ndarray, dtype: np.float32, shape: chs x points
     * marker数据(示例如下)，其中timepoint对应的是相对于信号采集起始时刻的时间点（已经根据采样率计算到了对应的数据点数，可利用这个点数进行切片操作）
@@ -76,7 +89,7 @@
     ```
     * **返回值**
     * 0: 什么也不干
-    * 1: 向订阅者(订阅者由configs['signal_processing']['result reciever address']定义)发送信号处理结果，信号处理的结果必须**转换为字符串并将其放入self.output_buffer**，函数返回后，程序将通过socket将其发送出去，订阅者收到消息后将通过约定的方式解码得到有用信息，推荐使用json字符串进行中间转换。**框架后期将支持解码器方式**
+    * 1: 向订阅者(订阅者由configs['signal_processing']['result reciever address']定义)发送信号处理结果，信号处理的结果存放到self.RESULT变量，系统调用self.CODE.encode方法后通过socket将其发送出去，订阅者收到消息后通过self.CODE.decode方法解码得到有用信息。
     * -1：结束程序。一般来说前台程序通过在marker中发送约定内容通知模块结束。
  
 ## 数据的保存与读取
