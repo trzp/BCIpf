@@ -19,6 +19,15 @@ import subprocess
 from storage import *
 
 
+class DefaultCoder():
+    def __init__(self):
+        pass
+
+    def encode(self,obj):
+        return json.dumps(obj)
+
+    def decode(self,buf):
+        return json.loads(buf)
 
 class SigPro(threading.Thread):
     def __init__(self,config_path = r'./config.js'):
@@ -53,11 +62,14 @@ class SigPro(threading.Thread):
         self._lock = thread.allocate_lock()
 
         self.__marker = {}
-        self.output_buffer = ""
+        self.RESULT = ""
 
         # 数据保存模块初始化
         self.stIF = StorageInterface()
-        self.storage_proc = multiprocessing.Process(target=storage_pro, args=(stIF.args, config))
+        self.storage_proc = multiprocessing.Process(target=storage_pro, args=(self.stIF.args, self.configs))
+        
+        # 发送结果的编码器
+        self.CODER = DefaultCoder()
 
     def run(self): # 子线程，记录marker
         samplingrate = self.configs['samplingrate']
@@ -80,7 +92,7 @@ class SigPro(threading.Thread):
         '''
         return value: 0 doing nothing
                       1 send result through the framework, to result should be transform to string bufffer and
-                      put in to the self.output_buffer
+                      put in to the self.RESULT
                       -1 end the program
                       ps: the predefined marker named 'endprocess' can end the program within the framework
         '''
@@ -106,7 +118,7 @@ class SigPro(threading.Thread):
                 self.stIF.write_mkr_to_file(marker)
                 r = self.process(eeg,marker)
                 if r == 1:
-                    [self.output_sock.sendto(self.output_buffer,addr) for addr in self.output_addr]
+                    [self.output_sock.sendto(self.CODER.encode(self.RESULT),addr) for addr in self.output_addr]
                 elif r == -1:
                     self.stIF.close()
                     break
@@ -118,15 +130,20 @@ class SigPro(threading.Thread):
         print('[sig pro] process ended!')
 
 
+class SigProApp(SigPro):
+    def __init__(self,configs_path):
+        super(SigPro,self).__init__(configs_path)
+        self.CODER = DefaultCoder()
+    
+    def process(self,eeg,marker):
+        if len(marker)>0:
+            print(marker)
+        return 0
+        
 def main():
-    args = sys.argv
-    if len(args)>1:
-        configs = args[1]
-        s = SigPro(configs)
-        s.start_run()
-    else:
-        s = SigPro()
-        s.start_run()
+    sp = SigProApp(configs_path)
+    sp.start_run()
+
 
 if __name__ == '__main__':
     main()
