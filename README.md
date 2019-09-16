@@ -1,2 +1,4 @@
 # BCIpf
-a light-weight cross platform bci platform
+一个轻量化跨平台和分布式的BCI程序框架
+
+# 
