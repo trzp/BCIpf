@@ -13,7 +13,6 @@ from sync_sock import SyncClient
 import socket
 import json
 import time
-from rz_global_clock import global_clock
 
 class Marker():
     def __init__(self,server_addr):
@@ -21,31 +20,28 @@ class Marker():
         self.sc.start_sync()
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.server_addr = server_addr
+        self.nCLK = time.clock()
+        self._markers_ = {}
 
+    # 为了缓解通信压力，marker发送间隔不低于0.1s
     def send_marker(self,marker):
-        # marker: eg. {'marker1':{'value':[1],'timestamp':[x]},'marker2':{'value':[0],'timestamp':[x]}}
-        for mk in marker:
-            marker[mk]['timestamp'] = map(self.sc.convert2remoteCLK,marker[mk]['timestamp'])
+        # marker: eg. {'mkr1':{'value':[0],'timestamp':[100]},'mkr2':{'value':[1,2],'timestamp':[200,250]}}
+        # 更新marker
+        for key in marker:
+            marker[key]['timestamp'] = map(self.sc.convert2remoteCLK,marker[key]['timestamp'])    # 时钟校准
+            mkr = marker[key]
+            if key in self._markers_:
+                self._markers_[key]['value'].extend(mkr['value'])
+                self._markers_[key]['timestamp'].extend(mkr['timestamp'])
+            else:
+                self._markers_[key] = mkr
 
-        buf = json.dumps(marker)
-        self.sock.sendto(buf,self.server_addr)
-
-def main():
-    with open(r'./config.js', 'r') as f:
-        config = json.load(f)
-
-    config = config['signal_processing']
-    addr = (config['sp_host_ip'],config['sp_host_port'])
-    mk = Marker(addr)
-    for i in range(30):
-        ts = global_clock()
-        mkr = {'mkr1':{'value':[0],'timestamp':[ts]},'mkr2':{'value':[1],'timestamp':[ts]}}
-        mk.send_marker(mkr)
-        time.sleep(1)
-        print 'o'
-
-if __name__ == '__main__':
-    main()
+        clk = time.clock()
+        if clk - self.nCLK >= 0.1:
+            buf = json.dumps(self._markers_)
+            self.sock.sendto(buf,self.server_addr)
+            self._markers_ = {}
+            self.nCLK = clk
 
 
 

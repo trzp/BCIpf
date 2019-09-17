@@ -17,17 +17,7 @@ import socket
 import thread
 import subprocess
 from storage import *
-
-
-class DefaultCoder():
-    def __init__(self):
-        pass
-
-    def encode(self,obj):
-        return json.dumps(obj)
-
-    def decode(self,buf):
-        return json.loads(buf)
+from coder import DefaultCoder
 
 class SigPro(threading.Thread):
     def __init__(self,config_path = r'./config.js'):
