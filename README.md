@@ -105,5 +105,60 @@
   from storage import read_mkr
   info,marker = read_mkr(filename)
   ```
+  
+# 模块二: BciCore 核心模块
+核心模块负责实验流程（phase）的组织以及与【信号处理】、【人机交互】模块的交互
+# BciCore主模块的实现：
+```javascript
+class bciApp(bciCore):
+    def __init__(self):
+        bciCore.__init__(self,config_path = r'./config.js')
+        self.PHASES = [ {'name':'start','next':'prompt','duration':1},
+                        {'name':'prompt','next':'que'},
+                        {'name':'que','next':'stop','duration':4}]
+        self.CODER = DefaultCoder()
+
+    def transition(self,phase):
+        self.write_log(phase)
+
+    def process(self,result):
+        if self.current_phase == 'prompt':
+            self.change_phase('que')
+
+if __name__ == '__main__':
+    app = bciApp()
+    app.start_run()
+```
+ * 实验主程序通过继承bciCore，实现transition以及process方法并调用start_run方法即可运行
+ * 原理：通过self.PHASES定义实验的每一个实验流程，即当前phase: name, 下一个phase: next, 两者之间的时间间隔duration: N second. 如果duration缺省，那么duration将为无限大。**phase必须开始于start并结束语stop**。phase定义完成后，实验流程将按照顺序和时间间隔（或者用户自定义的跳转）顺序跳转，每跳转到一个新的phase,系统将调用transition方法，用户在实现在方法中决定进行什么处理。process为并发线程，每0.1秒调用一次，用户可进行相关操作。**如果不需要使用process方法则应当在子类中忽略该方法，而不是 def process(self): pass ，忽略该方法能够节省程序开销**。
+ * 成员变量列表：
+   * PHASES
+   * current_phase
+ * 成员方法列表：
+   * process(result): 每0.1秒调用一次.**框架将建立socket,绑定到系统配置的['signal_processing']['result receiver address'][0],即第0个地址**，接收sigPro发送的信号处理的结果，并通过self.CODER定义的解码器解码得到结果。如果没有收到结果，则result=None。
+   * transition(phase): 每跳转到新的phase调用，phase同时被记录到self.current_phase
+   * change_phase(phase): 立即跳转到phae
+   * write_log(mess): 打印一些信息
+   * start_run(): 启动运行（不可重载）
+   * stop_run(): 程序结束后调用（可重载）
+
+# marker的使用
+marker意味标签，也可理解为事件，在BCI实验中极其重要。在本框架中marker将主控和信号处理联系起来，用来标记信号以及通知sigpro需要进行的操作。
+**特别要注意的是，marker如果作为刺激事件的标记，那么其时间上的准确性将极其关键。所以我们推荐的是哪里发生事件就在哪里写marker**。
+## marker类说明
+ ```javascript
+ class Marker():
+    def __init__(self,server_addr):
+        ...
+        
+    def send_marker(self,marker):
+        # marker: eg. {'mkr1':{'value':[1],'timestamp':[x]},'marker2':{'value':[0],'timestamp':[x]}}
+        ...
+ ```
+  * server_addr: 一般为sigpro绑定的地址
+  * marker初始化：将建立与sigpro的临时连接，通过进行时钟数据的交换，实现两者的时钟同步（典型场景是两者在不通的计算机上，时钟系统不一致）。
+  * send_marker: 通过socket向sigpro发送带时间戳的marker,该maker的时间戳已经换算到目标计算机的时钟系统中。
+  * marker的格式为：{'mkr1':{'value':[1],'timestamp':[x]},'mkr2':{'value':[0],'timestamp':[x]}}
+  **特别注意：marker的timestamp一定要通过rz_global_clock.global_clock获取，否则将造成严重错误**
 
 
