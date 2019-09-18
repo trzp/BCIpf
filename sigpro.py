@@ -11,13 +11,12 @@ rootpath = os.path.split(os.path.realpath(__file__))[0]
 sys.path.append(rootpath + '\\amplifiers')
 
 import threading
-
 from rz_global_clock import global_clock
-import socket
-import thread
+import _thread as thread
 import subprocess
-from storage import *
+from storage2 import *
 from coder import DefaultCoder
+
 
 class SigPro(threading.Thread):
     def __init__(self,config_path = r'./config.js'):
@@ -55,8 +54,11 @@ class SigPro(threading.Thread):
         self.RESULT = ""
 
         # 数据保存模块初始化
-        self.stIF = StorageInterface()
-        self.storage_proc = multiprocessing.Process(target=storage_pro, args=(self.stIF.args, self.configs))
+        self.SAVEDATA = False
+        if self.configs['save data']: self.SAVEDATA = True
+        if self.SAVEDATA:
+            self.stIF = StorageInterface()
+            self.storage_proc = multiprocessing.Process(target=storage_pro, args=(self.stIF.args, self.configs))
         
         # 发送结果的编码器
         self.CODER = DefaultCoder()
@@ -65,6 +67,7 @@ class SigPro(threading.Thread):
         samplingrate = self.configs['samplingrate']
         while self.__marker_thread_on:
             buf,addr = self.sock.recvfrom(512)
+            buf = bytes.decode(buf,encoding='utf-8')
             marker = json.loads(buf) # eg. marker: {'mkr1':{'value':[1],'timestamp':[xxxx]}}
 
             self._lock.acquire()
@@ -86,16 +89,14 @@ class SigPro(threading.Thread):
                       -1 end the program
                       ps: the predefined marker named 'endprocess' can end the program within the framework
         '''
-        if len(marker)>0:
-            print(marker)
         return 0
 
     def start_run(self):
-        # 启动数据保存进程
-        self.storage_proc.start()
+        if self.SAVEDATA: self.storage_proc.start()
         self.start()  # 启动子线程,接收marker
-
+        print('[sigpro module] process started')
         self.start_clk = global_clock()
+        print(self.start_clk,'startclock')
         lsclk = self.start_clk - 0.1  #确保立即采集数据，采集数据与start_clk对齐
 
         while True:
@@ -104,36 +105,37 @@ class SigPro(threading.Thread):
                 eeg = self.amp.read()
                 marker = copy(self.__marker)
                 self.__marker = {}
-                self.stIF.write_eeg_to_file(eeg)
-                self.stIF.write_mkr_to_file(marker)
+                if self.SAVEDATA:
+                    self.stIF.write_eeg_to_file(eeg)
+                    self.stIF.write_mkr_to_file(marker)
                 r = self.process(eeg,marker)
                 if r == 1:
-                    [self.output_sock.sendto(self.CODER.encode(self.RESULT),addr) for addr in self.output_addr]
+                    [self.output_sock.sendto(self.CODER.encode(self.RESULT),tuple(addr)) for addr in self.output_addr]
                 elif r == -1:
-                    self.stIF.close()
+                    if self.SAVEDATA:
+                        self.stIF.close()
                     break
                 else:
                     pass
                 lsclk += 0.1
             time.sleep(0.05)
 
-        print('[sig pro] process ended!')
+        print('[sigpro module] process exit')
 
 
 class SigProApp(SigPro):
-    def __init__(self,configs_path):
-        super(SigPro,self).__init__(configs_path)
+    def __init__(self,configs_path = './config.js'):
+        super(SigProApp,self).__init__(configs_path)
         self.CODER = DefaultCoder()
     
     def process(self,eeg,marker):
-        if len(marker)>0:
-            print(marker)
+        # if len(marker)>0:
+        #     print(marker)
         return 0
         
 def main():
-    sp = SigProApp(configs_path)
+    sp = SigProApp()
     sp.start_run()
-
 
 if __name__ == '__main__':
     main()

@@ -16,21 +16,28 @@ import time
 from multiprocessing import Queue,Event
 import multiprocessing
 from signal_generator import *
+import socket
 
+# storage 通过tcp/ip监听指令决定是否启动数据保存以及结束保存
+# 任何时候其他进程都可发起数据保存请求，但是否被保存取决于当前是否处于保存数据的状态
+# 这样，可以保障信号处理主进程可以始终运行，而数据保存仅在需要保存数据时保存数据
 
 class Storage():
     def __init__(self,configs):
-        # 生成文件名
         self.configs = configs
-        head = configs['subject'] + '-S%02iR' % (configs['session'])  #eg. sub-S01R
+        self.OK = False
+
+    def prefile(self):
+        # 生成文件名
+        head = self.configs['subject'] + '-S%02iR' % (self.configs['session'])  #eg. sub-S01R
         filename = head + '001'
-        newfilename = configs['storage path'] + '//' + filename
-        if not os.path.exists(configs['storage path']): # 没有目录则创建目录
-            os.makedirs(configs['storage path'])
+        newfilename = self.configs['storage path'] + '//' + filename
+        if not os.path.exists(self.configs['storage path']): # 没有目录则创建目录
+            os.makedirs(self.configs['storage path'])
         else:
-            files = os.listdir(configs['storage path']) # 遍历所有文件
+            files = os.listdir(self.configs['storage path']) # 遍历所有文件
             nums = [self.getnum(f, head) for f in files if self.getnum(f, head) > -1]
-            if nums != []:    newfilename = configs['storage path'] + '//' + head + '%03i' % (max(nums) + 1)
+            if nums != []:    newfilename = self.configs['storage path'] + '//' + head + '%03i' % (max(nums) + 1)
 
         self.marker_file_name = newfilename + ".npz"
         self.eeg_file_name = newfilename + ".eeg"
@@ -57,6 +64,9 @@ class Storage():
         self.mkrCLK = time.clock()
         self.eeg_str = b''
         self.eegCLK = time.clock()
+        print('[storage module] ready:\n>>>> eegfile: %s \n>>>> mkrfile: %s'%(self.eeg_file_name,self.marker_file_name))
+
+        self.OK = True
 
     def getnum(self,file,head):
         hi = file.find(head)
@@ -71,9 +81,10 @@ class Storage():
                 return -1
 
     def write_eeg_string(self,eegstr): # eeg: ch1point1,ch2point1,ch3point1,ch1point2,ch2point2..., np.float32
+        if not self.OK: return
         self.eeg_str += eegstr
         nCLK = time.clock()
-        if nCLK - self.eegCLK > 3:  # 5秒左右保存一次数据
+        if nCLK - self.eegCLK > 5:  # 5秒左右保存一次数据
             with open(self.eeg_file_name,'ab') as f:
                 try:
                     f.write(self.eeg_str)
@@ -88,6 +99,7 @@ class Storage():
         eeg: ch x N
         to dat file: ch1point1 ch2point1 ch1point2 ch2point2
         '''
+        if not self.OK: return
         eegstr = eeg.transpose().flatten().astype(np.float32).tostring()
         self.write_eeg_string(eegstr)
 
@@ -105,6 +117,8 @@ class Storage():
 
         # marker: eg. {'mkr1':{'value':[0],'timepoint':[100]},'mkr2':{'value':[1,2],'timepoint':[200,250]}}
         # 更新marker
+
+        if not self.OK:  return
         for key in marker:
             mkr = marker[key]
             mk = np.array([mkr['value'],mkr['timepoint']])
@@ -147,17 +161,17 @@ def storage_pro(args,configs):
     ev = args['ev']
     que = args['que']
     st = Storage(configs)
+    st.prefile()
 
     while not ev.is_set():
         flg,buf = que.get()
-        print(flg)
         if flg == 'eeg':
             st.write_eeg(buf)
         elif flg == 'mkr':
             st.write_marker(buf)
         else:
             pass
-    print('[storage module] program ended')
+    print('[storage module] process exit')
 
 def main():
     with open(r'./config.js', 'r') as f:
@@ -197,10 +211,12 @@ def read_eeg(filename):
 
 
 if __name__ == '__main__':
-    # read_mkr('f:\\data\\TJS-S01R001.npz')
+    # read_mkr('f:\\data\\Test-S01R001.npz')
     # main()
 
-    read_eeg('f:\\data\\TJS-S01R019.eeg')
+    info,eeg = read_eeg('f:\\data\\Test-S01R001.eeg')
+    info1,mkr = read_mkr('f:\\data\\Test-S01R001.npz')
+    pass
 
 
 

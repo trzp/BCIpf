@@ -28,7 +28,7 @@ class Marker():
         # marker: eg. {'mkr1':{'value':[0],'timestamp':[100]},'mkr2':{'value':[1,2],'timestamp':[200,250]}}
         # 更新marker
         for key in marker:
-            marker[key]['timestamp'] = map(self.sc.convert2remoteCLK,marker[key]['timestamp'])    # 时钟校准
+            marker[key]['timestamp'] = list(map(self.sc.convert2remoteCLK,marker[key]['timestamp']))    # 时钟校准
             mkr = marker[key]
             if key in self._markers_:
                 self._markers_[key]['value'].extend(mkr['value'])
@@ -39,6 +39,7 @@ class Marker():
         clk = time.clock()
         if clk - self.nCLK >= 0.1:
             buf = json.dumps(self._markers_)
+            buf = bytes(buf,encoding='utf-8')
             self.sock.sendto(buf,self.server_addr)
             self._markers_ = {}
             self.nCLK = clk

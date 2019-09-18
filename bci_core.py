@@ -9,12 +9,12 @@ from __future__ import division
 from __future__ import print_function
 from phase import *
 import threading
-# from rz_global_clock import global_clock as sysclock
 from rz_clock import clock as sysclock
 import time
 from coder import DefaultCoder
 import json
 import socket
+from storage2 import RemoteStorageCmd
 
 
 class bciCore(threading.Thread):
@@ -46,7 +46,7 @@ class bciCore(threading.Thread):
         print('[bciCore][%.4f]%s'%(sysclock(),m))
 
     def __mainloop(self): #主线程接受phase驱动整个程
-        self.write_log('program started!')
+        self.write_log('process started!')
         self.start()    #启动子线程
         while True:
             self.current_phase = self._phIF.next_phase()
@@ -55,7 +55,7 @@ class bciCore(threading.Thread):
                 break
                 
         self.stop_run()
-        self.write_log('[bciCore] program ended!')
+        self.write_log('[bciCore] process exit!')
         time.sleep(1)
 
     def run(self):  #异步子线程,按照fps定义的节奏定时执行
@@ -87,6 +87,7 @@ class bciCore(threading.Thread):
         
     def stop_run(self):
         pass
+
 
 class bciApp(bciCore):
     def __init__(self):

@@ -15,9 +15,9 @@ class DefaultCoder():
         pass
 
     def encode(self,obj):
-        return json.dumps(obj)
+        return bytes(json.dumps(obj),encoding='utf-8')
 
     def decode(self,buf):
-        return json.loads(buf)
+        return json.loads(bytes.decode(buf,encoding='utf-8'))
 
 

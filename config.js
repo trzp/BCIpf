@@ -1,4 +1,3 @@
-
 {
 "info":
     {
@@ -8,7 +7,7 @@
 
 "signal_processing":
     {
-       "subject": "TJS",
+       "subject": "Test",
        "save data": true,
        "storage path": "f:\\data",
        "session": 1,
@@ -18,8 +17,9 @@
        "ref channel label": ["T7", "T8"],
        "samplingrate": 100,
        "amplifier": "signal_generator",
-       "sp_host_ip": "localhost",
+       "sp_host_ip": "127.0.0.1",
        "sp_host_port": 9876,
-       "result receiver address": [["127.0.0.1", 9877], ["127.0.0.1", 9879]]
+       "sp_host_port1":9875,
+       "result receiver address": [["127.0.0.1", 9877]]
     }
 }

@@ -22,7 +22,7 @@ def register_phase(arg):
     PHASES['start'] = {'next': '', 'duration': __INF__}
     PHASES['stop'] = {'next': '', 'duration': __INF__}
     for item in arg:
-        if item.has_key('duration'):
+        if 'duration' in item:
             PHASES[item['name']]={'next':item['next'],'duration':item['duration']}
         else:
             PHASES[item['name']]={'next':'','duration':__INF__}
