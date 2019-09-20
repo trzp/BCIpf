@@ -8,15 +8,14 @@
 # @Contact : mrtang@nudt.edu.cn   mrtang_cs@163.com
 # @License : (C) All Rights Reserved
 
-from __future__ import print_function
 import os
 from copy import copy
 import json
 import time
 from multiprocessing import Queue,Event
 import multiprocessing
-from signal_generator import *
-import socket
+from signal_generator import EEGamp
+import numpy as np
 
 # storage 通过tcp/ip监听指令决定是否启动数据保存以及结束保存
 # 任何时候其他进程都可发起数据保存请求，但是否被保存取决于当前是否处于保存数据的状态
@@ -135,15 +134,17 @@ class Storage():
 # 一般情况为storage模块开启一个独立进程
 class StorageInterface():
     def __init__(self):
+        self.ok = Event()
         self.ev = Event()
         self.que = Queue()
-        self.args = {'ev':self.ev,'que':self.que}
+        self.args = {'ev':self.ev,'que':self.que,'ok':self.ok}
 
     def write_eeg_to_file(self,eeg):
         '''
         eeg:  ch x N
         '''
-        self.que.put(['eeg',eeg])
+        if eeg is not None:
+            self.que.put(['eeg',eeg])
 
     def write_mkr_to_file(self,mkr):
         if len(mkr)>0:
@@ -153,15 +154,20 @@ class StorageInterface():
         self.que.put(['end',''])
         self.ev.set()
 
+    def wait(self):
+        self.ok.wait()
+
     def __del__(self):
         self.que.put(['end', ''])
         self.ev.set()
 
 def storage_pro(args,configs):
+    ok = args['ok']
     ev = args['ev']
     que = args['que']
     st = Storage(configs)
     st.prefile()
+    ok.set() #发送初始化完成的状态
 
     while not ev.is_set():
         flg,buf = que.get()

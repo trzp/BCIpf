@@ -11,39 +11,45 @@ rootpath = os.path.split(os.path.realpath(__file__))[0]
 sys.path.append(rootpath + '\\amplifiers')
 
 import threading
-from rz_global_clock import global_clock
 import _thread as thread
 import subprocess
 from storage2 import *
 from coder import DefaultCoder
+from rz_clock import clock
 
 
 class SigPro(threading.Thread):
     def __init__(self,config_path = r'./config.js'):
         with open(config_path,'r') as f:
-            self.config = json.load(f)
-        
-        self.configs = self.config['signal_processing']
-        exec('from %s import EEGamp'%(self.configs['amplifier']))
+            buf = f.read()
+            self.config = json.loads(buf)
+
+        self.spconfig = self.config['signal_processing']
 
         # 不需要接受marker则不启动marker子线程
-        if self.configs['sp_host_ip'] is None:
+        if self.spconfig['sp_host_ip'] is None:
             self.__marker_thread_on = False
         else:
             self.__marker_thread_on = True
-            addr = (self.configs['sp_host_ip'],self.configs['sp_host_port'])
+            addr = (self.spconfig['sp_host_ip'],self.spconfig['sp_host_port'])
 
             #启用临时进程进行时钟同步
-            subprocess.Popen('python sync_sock.py %s %i' % (self.configs['sp_host_ip'], self.configs['sp_host_port']))
+            subprocess.Popen('python sync_sock.py %s %i' % (self.spconfig['sp_host_ip'], self.spconfig['sp_host_port']))
+            time.sleep(1)
 
             self.sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM) # 建立udp socket
             self.sock.bind(addr)
 
-        self.output_sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM) # 建立udp socket
-        self.output_addr = self.configs['result receiver address']
+        self.SAVEDATA = False
+        if self.spconfig['save data']: self.SAVEDATA = True
 
-        self.amp = EEGamp(self.configs['samplingrate'],self.configs['eeg channels'],self.configs['eeg channel label'],
-                          self.configs['ref channels'],self.configs['ref channel label'])
+        self.output_sock = socket.socket(socket.AF_INET,socket.SOCK_DGRAM) # 建立udp socket
+        self.output_addr = self.spconfig['result receiver address']
+
+        ampclass = {}
+        exec('from %s import EEGamp' % (self.spconfig['amplifier'],),ampclass) # python3 对exec进行了安全性升级，注意参数的使用
+        EEGamp = ampclass['EEGamp']
+        self.amp = EEGamp(self.spconfig['samplingrate'],self.spconfig['eeg channels'],0.1,**self.spconfig['amplifier params'])
 
 
         threading.Thread.__init__(self)
@@ -52,19 +58,12 @@ class SigPro(threading.Thread):
 
         self.__marker = {}
         self.RESULT = ""
-
-        # 数据保存模块初始化
-        self.SAVEDATA = False
-        if self.configs['save data']: self.SAVEDATA = True
-        if self.SAVEDATA:
-            self.stIF = StorageInterface()
-            self.storage_proc = multiprocessing.Process(target=storage_pro, args=(self.stIF.args, self.configs))
         
         # 发送结果的编码器
         self.CODER = DefaultCoder()
 
     def run(self): # 子线程，记录marker
-        samplingrate = self.configs['samplingrate']
+        samplingrate = self.spconfig['samplingrate']
         while self.__marker_thread_on:
             buf,addr = self.sock.recvfrom(512)
             buf = bytes.decode(buf,encoding='utf-8')
@@ -91,24 +90,33 @@ class SigPro(threading.Thread):
         '''
         return 0
 
+    def ac_once(self):
+        eeg,clk = self.amp.read()
+        marker = copy(self.__marker)
+        self.__marker = {}
+        if self.SAVEDATA:
+            self.stIF.write_eeg_to_file(eeg)
+            self.stIF.write_mkr_to_file(marker)
+        r = self.process(eeg, marker)
+        return r,clk
+
     def start_run(self):
-        if self.SAVEDATA: self.storage_proc.start()
         self.start()  # 启动子线程,接收marker
         print('[sigpro module] process started')
-        self.start_clk = global_clock()
-        print(self.start_clk,'startclock')
-        lsclk = self.start_clk - 0.1  #确保立即采集数据，采集数据与start_clk对齐
 
+        # 数据保存模块初始化
+        if self.SAVEDATA:
+            self.stIF = StorageInterface()
+            self.storage_proc = multiprocessing.Process(target=storage_pro, args=(self.stIF.args, self.spconfig))
+            self.storage_proc.start()
+            self.stIF.wait()
+
+        r,self.start_clk = self.ac_once()
+        lsclk = clock()
         while True:
-            clk = global_clock()
+            clk = clock()
             if clk - lsclk >= 0.1:
-                eeg = self.amp.read()
-                marker = copy(self.__marker)
-                self.__marker = {}
-                if self.SAVEDATA:
-                    self.stIF.write_eeg_to_file(eeg)
-                    self.stIF.write_mkr_to_file(marker)
-                r = self.process(eeg,marker)
+                r,_ = self.ac_once()
                 if r == 1:
                     [self.output_sock.sendto(self.CODER.encode(self.RESULT),tuple(addr)) for addr in self.output_addr]
                 elif r == -1:
@@ -120,6 +128,7 @@ class SigPro(threading.Thread):
                 lsclk += 0.1
             time.sleep(0.05)
 
+        self.amp.close()
         print('[sigpro module] process exit')
 
 

@@ -8,10 +8,10 @@
 
 import numpy as np
 import math
-#from rz_global_clock import global_clock
+from rz_global_clock import global_clock
 
 class EEGamp(object):
-    def __init__(self,samplingrate,eegchannels,channelnames=[],refchannels=[],refchannellabel=[],readstep = 0.1):
+    def __init__(self,samplingrate,eegchannels,readstep = 0.1,**kwargs):
         self.samplingrate = samplingrate
         sin_f = 8.                                     #系统默认产生8Hz的正弦波
         x = np.arange(0,1/sin_f,1./samplingrate)
@@ -25,8 +25,10 @@ class EEGamp(object):
     def read(self):
         data = self.y[:,:self.readpoint]
         self.y = np.hstack((self.y[:,self.readpoint:],data))
-        # return global_clock(),data
-        return data
+        return data,global_clock()-0.1
+
+    def close(self):
+        pass
 
 if __name__ == '__main__':
     import matplotlib.pyplot as plt
