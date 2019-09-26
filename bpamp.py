@@ -31,11 +31,21 @@ import numpy as np
     }
 '''
 
+# 不同bp产品型号对应不同的信号发送间隔
+BPINTERVAL = {'actichamp':0.050,
+              'brainamp':0.020}
+
 class EEGamp(threading.Thread):
     def __init__(self,samplingrate,eegchannels,readstep = 0.1,**kwargs):
         threading.Thread.__init__(self)
         ip = kwargs['remote device ip']
         port = kwargs['remote device port']  #51244
+        if kwargs['product model'] not in BPINTERVAL:
+            raise SystemError('currently only %s supported, please contact mrtang_cs@163'%(str(BPINTERVAL.keys())[10:-1]))
+        
+        self.interval = BPINTERVAL[kwargs['product model']]
+        
+        
         addr = (ip,port)
         self.con =  socket.socket(socket.AF_INET,socket.SOCK_STREAM)
 
@@ -105,10 +115,10 @@ class EEGamp(threading.Thread):
 
             elif msgtype == 4:
                 # Data message, extract data and markers
-                clk = global_clock() - 0.05 # 数据是50ms范围内的数据，因此受到数据的前0.05s才是数据起始时刻
+                clk = global_clock() - self.interval # 数据是50ms范围内的数据，因此受到数据的前0.05s才是数据起始时刻
                 (block, points, markerCount, data, markers) = GetData(rawdata, channelCount)
                 if not self.deviceOK:
-                    fs = 20 * points
+                    fs = points/self.interval
                     if fs != self.fs:
                         raise SystemError('[bp amp] samplingrate is not match between configuration and device setting. configs: %d  device: %d' % (self.fs, fs))
                     self.deviceOK = True
