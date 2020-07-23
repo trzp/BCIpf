@@ -27,14 +27,14 @@ class bciApp(bciCore):
 
         layout = {'screen': {'size': (1000, 250), 'color': (0, 0, 0), 'type': 'normal',
                              'Fps': 60, 'caption': 'this is an example'},
-                  'ssvep1': {'class': 'sinBlock', 'parm': {'size': (150, 150), 'position': (125, 125),'borderon':True,
+                  'ssvep1': {'class': 'sinBlock', 'parm': {'size': (150, 150), 'position': (125, 125),
                         'bordercolor':(0,0,0),'anchor':'center','frequency': 6, 'visible': True, 'start': False}},
-                  'ssvep2': {'class': 'sinBlock', 'parm': {'size': (150, 150), 'position': (375, 125),'borderon':True,
+                  'ssvep2': {'class': 'sinBlock', 'parm': {'size': (150, 150), 'position': (375, 125),
                         'bordercolor':(0,0,0),'anchor': 'center','frequency': 7, 'visible': True, 'start': False}},
-                  'ssvep3': {'class': 'sinBlock', 'parm': {'size': (150, 150), 'position': (625, 125),'borderon':True,
+                  'ssvep3': {'class': 'sinBlock', 'parm': {'size': (150, 150), 'position': (625, 125),
                         'bordercolor':(0,0,0),'anchor':'center','frequency': 8, 'visible': True, 'start': False}},
-                  'ssvep4': {'class': 'sinBlock', 'parm': {'size': (150, 150), 'position': (875, 125),'borderon':True,
-                        'bordercolor':(255,0,0),'anchor': 'center', 'frequency': 9, 'visible': True, 'start': False}},
+                  'ssvep4': {'class': 'sinBlock', 'parm': {'size': (150, 150), 'position': (875, 125),
+                        'bordercolor':(0,0,0),'anchor': 'center', 'frequency': 9, 'visible': True, 'start': False}},
                   }
 
         self.gui = GuiIF(None,layout)
@@ -46,19 +46,17 @@ class bciApp(bciCore):
         sp_port = self.configs['signal_processing']['sp_host_port']
         self.marker = Marker((sp_ip,sp_port))
 
-        self.TEST_NUM = 3
+        self.TEST_NUM = 80
         self.test_count = 1
 
     def transition(self,phase):
         write_log(phase)
-        if phase == 'start':
-            self.marker.send_marker({'new-record':{'value':[1],'timestamp':[global_clock()]}})
-
-        elif phase == 'test':
+        if phase == 'test':
             self.gui.update({'ssvep1': {'start': True,'bordercolor':(0,0,0)}, 'ssvep2': {'start': True,'bordercolor':(0,0,0)}, 'ssvep3': {'start': True,'bordercolor':(0,0,0)},
                              'ssvep4': {'start': True,'bordercolor':(0,0,0)}}, {})
 
             t = global_clock()
+            print(t)
             self.marker.send_marker({'process':{'value':[1],'timestamp':[t]}})    #开始测试
 
         elif phase == 'relax':
@@ -72,15 +70,13 @@ class bciApp(bciCore):
                 self.change_phase('rrelax')
 
     def stop_run(self):
-        self.marker.send_marker({'endsigpro':{'value':[0],'timestamp':[0]}})
         self.gui.quit()
 
     def process(self,result):
         if result is not None:
-            self.gui.update({'ssvep%d' % (2 + 1): {'bordercolor': (255, 0, 0)}}, {})
             print(result)
-            if result<4:
-                self.gui.update({'ssvep%d'%(result+1): {'bordercolor':(255,0,0)}},{})
+            mapp = {'6':'ssvep1','7':'ssvep2','8':'ssvep3','9':'ssvep4'}
+            self.gui.update({mapp[str(result)]: {'bordercolor':(255,0,0)}},{})
 
 if __name__ == '__main__':
     app = bciApp()

@@ -145,12 +145,6 @@ class StorageInterface():
         '''
         if eeg is not None:
             self.que.put(['eeg',eeg])
-            
-    def new_record(self):
-        self.que.put(['new-record',''])
-    
-    def end_record(self):
-        self.que.put(['end-record',''])
 
     def write_mkr_to_file(self,mkr):
         if len(mkr)>0:
@@ -172,7 +166,7 @@ def storage_pro(args,configs):
     ev = args['ev']
     que = args['que']
     st = Storage(configs)
-    # st.prefile()
+    st.prefile()
     ok.set() #发送初始化完成的状态
 
     while not ev.is_set():
@@ -181,10 +175,6 @@ def storage_pro(args,configs):
             st.write_eeg(buf)
         elif flg == 'mkr':
             st.write_marker(buf)
-        elif flg == 'new-record':       #创建一个新文件
-            st.prefile()
-        elif flg == 'end-record':
-            st.OK = False               # 停止当前记录
         else:
             pass
     print('[storage module] process exit')
@@ -198,7 +188,6 @@ def main():
     stIF = StorageInterface()
     p = multiprocessing.Process(target=storage_pro, args=(stIF.args, config))
     p.start()
-    stIF.wait()
 
     for i in range(100):
         # marker = {'mkr':{'value':[i,i],'timepoint':[i*10,i*10]}}
@@ -231,9 +220,8 @@ if __name__ == '__main__':
     # read_mkr('f:\\data\\Test-S01R001.npz')
     # main()
 
-    # info,eeg = read_eeg('f:\\data\\Test-S01R001.eeg')
-    # info1,mkr = read_mkr('f:\\data\\Test-S01R001.npz')
-    main()
+    info,eeg = read_eeg('f:\\data\\Test-S01R001.eeg')
+    info1,mkr = read_mkr('f:\\data\\Test-S01R001.npz')
     pass
 
 
